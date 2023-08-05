@@ -1,13 +1,26 @@
-import { ethers } from 'ethers';
-import { useEffect, useState } from 'react';
-import deploy from './deploy';
-import Escrow from './Escrow';
+import { ethers } from "ethers";
+import { useEffect, useState } from "react";
+import deploy from "./deploy";
+import Escrow from "./Escrow";
 
+const ESCROWS = "ESCROWS";
 const provider = new ethers.providers.Web3Provider(window.ethereum);
 
-export async function approve(escrowContract, signer) {
-  const approveTxn = await escrowContract.connect(signer).approve();
-  await approveTxn.wait();
+export async function approve(contract, arbiterSigner) {
+  const promise = contract.connect(arbiterSigner).approve();
+  return promise.wait();
+}
+
+function clearContractStore() {
+  localStorage.removeItem(ESCROWS);
+}
+
+function addContractStore(escrowArtifact) {
+  localStorage.setItem(ESCROWS, escrowArtifact);
+}
+
+function getContractStore() {
+  return localStorage.getItem(ESCROWS);
 }
 
 function App() {
@@ -17,40 +30,59 @@ function App() {
 
   useEffect(() => {
     async function getAccounts() {
-      const accounts = await provider.send('eth_requestAccounts', []);
+      const accounts = await provider.send("eth_requestAccounts", []);
 
       setAccount(accounts[0]);
       setSigner(provider.getSigner());
     }
 
     getAccounts();
+
+    // Restore last copy from store
+    const cashedEscrows = getContractStore();
+    if (cashedEscrows) {
+      setEscrows(cashedEscrows);
+    }
   }, [account]);
 
   async function newContract() {
-    const beneficiary = document.getElementById('beneficiary').value;
-    const arbiter = document.getElementById('arbiter').value;
-    const value = ethers.BigNumber.from(document.getElementById('wei').value);
-    const escrowContract = await deploy(signer, arbiter, beneficiary, value);
+    const beneficiaryAddress = document.getElementById("beneficiary").value;
+    const arbiterAddress = document.getElementById("arbiter").value;
+    let value = document.getElementById("ether").value;
+    value = ethers.utils.parseEther(value);
 
+    try {
+      const escrowContract = await deploy(
+        signer,
+        arbiterAddress,
+        beneficiaryAddress,
+        value
+      );
 
-    const escrow = {
-      address: escrowContract.address,
-      arbiter,
-      beneficiary,
-      value: value.toString(),
-      handleApprove: async () => {
-        escrowContract.on('Approved', () => {
-          document.getElementById(escrowContract.address).className =
-            'complete';
-          document.getElementById(escrowContract.address).innerText =
-            "✓ It's been approved!";
-        });
+      const escrow = {
+        address: escrowContract.address,
+        arbiterAddress,
+        beneficiaryAddress,
+        value: ethers.utils.formatEther(value),
+        handleApprove: async () => {
+          escrowContract.on("Approved", () => {
+            document.getElementById(escrowContract.address).className =
+              "complete";
+            document.getElementById(escrowContract.address).innerText =
+              "✓ It's been approved!";
+          });
 
-        await approve(escrowContract, signer);
-      },
-    };
+          await approve(escrowContract, signer);
+        },
+      };
 
-    setEscrows([...escrows, escrow]);
+      setEscrows([...escrows, escrow]);
+
+      // Add to local storage
+      addContractStore(escrows);
+    } catch (error) {
+      console.error(error);
+    }
   }
 
   return (
@@ -68,8 +100,8 @@ function App() {
         </label>
 
         <label>
-          Deposit Amount (in Wei)
-          <input type="text" id="wei" />
+          Deposit Amount (in ETH)
+          <input type="text" id="ether" />
         </label>
 
         <div
@@ -87,7 +119,15 @@ function App() {
 
       <div className="existing-contracts">
         <h1> Existing Contracts </h1>
-
+        <button
+          className="button delete"
+          onClick={() => {
+            clearContractStore();
+            setEscrows([]);
+          }}
+        >
+          Remove old deployment
+        </button>
         <div id="container">
           {escrows.map((escrow) => {
             return <Escrow key={escrow.address} {...escrow} />;

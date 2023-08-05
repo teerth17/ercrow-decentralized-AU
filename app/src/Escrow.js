@@ -5,6 +5,21 @@ export default function Escrow({
   value,
   handleApprove,
 }) {
+  const [approved, setApproved] = useState(false);
+  useEffect(() => {
+    const savedApproval = localStorage.getItem(address);
+    if (savedApproval) {
+      setApproved(JSON.parse(savedApproval));
+    }
+  }, [address]);
+
+  async function onClick(e) {
+    e.preventDefault();
+    await handleApprove();
+    localStorage.setItem(address, JSON.stringify(true));
+    setApproved(true);
+  }
+
   return (
     <div className="existing-contract">
       <ul className="fields">
@@ -21,15 +36,11 @@ export default function Escrow({
           <div> {value} </div>
         </li>
         <div
-          className="button"
+          className={`button ${approved ? "complete" : ""}`}
           id={address}
-          onClick={(e) => {
-            e.preventDefault();
-
-            handleApprove();
-          }}
+          onClick={onClick}
         >
-          Approve
+          {approved ? "✓ It's been approved!" : "Approve"}
         </div>
       </ul>
     </div>
